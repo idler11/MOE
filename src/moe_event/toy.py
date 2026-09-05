@@ -1,13 +1,13 @@
 """Deterministic bias-free toy MoE used for P1 mathematical reference checks."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 
 from .routing import boundary_margin, canonicalize_sets, near_tie_flags, stable_topk_sets
-from .types import ForwardResult, GATE_MODES, RouteState
+from .types import ForwardResult, GATE_MODES, RouteState, RoutedInputs
 
 
 class ToyMoE(torch.nn.Module):
@@ -98,10 +98,19 @@ class ToyMoE(torch.nn.Module):
         denominator = torch.sqrt(hidden.square().mean(dim=1, keepdim=True) + self.rms_epsilon)
         return hidden * self.gamma.unsqueeze(0) / denominator
 
-    def route(self, hidden: torch.Tensor, tie_tolerance: float = 1.0e-12) -> RouteState:
-        normalized = self.rms_normalize(hidden)
+    def _route_from_normalized(
+        self,
+        normalized: torch.Tensor,
+        forced_sets: Optional[torch.Tensor] = None,
+        tie_tolerance: float = 1.0e-12,
+    ) -> RouteState:
         logits = normalized @ self.router.transpose(0, 1)
-        sets = stable_topk_sets(logits, self.top_k)
+        if forced_sets is None:
+            sets = stable_topk_sets(logits, self.top_k)
+        else:
+            sets = canonicalize_sets(forced_sets.to(device=logits.device), self.num_experts)
+            if sets.shape != (normalized.shape[0], self.top_k):
+                raise ValueError("forced_sets must have shape [tokens, top_k]")
         probabilities = torch.softmax(logits, dim=1)
         return RouteState(
             sets=sets,
@@ -111,12 +120,43 @@ class ToyMoE(torch.nn.Module):
             boundary_margin=boundary_margin(logits, sets),
         )
 
+    def route(self, hidden: torch.Tensor, tie_tolerance: float = 1.0e-12) -> RouteState:
+        return self._route_from_normalized(self.rms_normalize(hidden), tie_tolerance=tie_tolerance)
+
+    def route_from_q(
+        self,
+        inputs: torch.Tensor,
+        bias: torch.Tensor,
+        q: torch.Tensor,
+        tie_tolerance: float = 1.0e-12,
+    ) -> RoutedInputs:
+        """Compute h/RMSNorm/router for all tokens without evaluating experts."""
+        hidden = self.hidden_from_q(inputs, bias, q)
+        normalized = self.rms_normalize(hidden)
+        return RoutedInputs(
+            hidden=hidden,
+            normalized=normalized,
+            route=self._route_from_normalized(normalized, tie_tolerance=tie_tolerance),
+        )
+
+    def gate_weights(self, route: RouteState, sets: torch.Tensor, gate_mode: str) -> torch.Tensor:
+        if gate_mode not in GATE_MODES:
+            raise ValueError("unsupported gate mode")
+        sets = canonicalize_sets(sets.to(device=route.logits.device), self.num_experts)
+        selected_weights = route.probabilities.gather(1, sets)
+        if gate_mode == "topk_renormalized":
+            selected_weights = selected_weights / selected_weights.sum(dim=1, keepdim=True)
+        return selected_weights
+
     def _dense_expert_outputs(self, normalized: torch.Tensor) -> torch.Tensor:
         hidden = F.silu(torch.einsum("nd,ewd->new", normalized, self.w_up))
         return torch.einsum("new,edw->ned", hidden, self.w_down)
 
-    def _sparse_expert_outputs(self, normalized: torch.Tensor, sets: torch.Tensor) -> torch.Tensor:
-        """Evaluate exactly the N*k requested expert paths, without dense masking."""
+    def expert_outputs_for_sets(self, normalized: torch.Tensor, sets: torch.Tensor) -> torch.Tensor:
+        """Evaluate exactly the requested expert paths, without dense masking."""
+        sets = canonicalize_sets(sets.to(device=normalized.device), self.num_experts)
+        if sets.shape[0] != normalized.shape[0] or sets.shape[1] < 1:
+            raise ValueError("sets must be nonempty and align with normalized tokens")
         token_outputs = []
         for token in range(normalized.shape[0]):
             selected_outputs = []
@@ -126,6 +166,36 @@ class ToyMoE(torch.nn.Module):
                 selected_outputs.append(self.w_down[expert] @ up)
             token_outputs.append(torch.stack(selected_outputs, dim=0))
         return torch.stack(token_outputs, dim=0)
+
+    def endpoint_union_outputs(
+        self,
+        normalized: torch.Tensor,
+        old_sets: torch.Tensor,
+        new_sets: torch.Tensor,
+        old_weights: torch.Tensor,
+        new_weights: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+        """Aggregate old/new routes from one de-duplicated union per token."""
+        old_sets = canonicalize_sets(old_sets.to(device=normalized.device), self.num_experts)
+        new_sets = canonicalize_sets(new_sets.to(device=normalized.device), self.num_experts)
+        if old_sets.shape != new_sets.shape or old_sets.shape[0] != normalized.shape[0]:
+            raise ValueError("old/new sets must align with normalized event tokens")
+        if old_weights.shape != old_sets.shape or new_weights.shape != new_sets.shape:
+            raise ValueError("gate weights must align with their route sets")
+        old_outputs = []
+        new_outputs = []
+        expert_calls = 0
+        for token in range(normalized.shape[0]):
+            union = torch.unique(torch.cat((old_sets[token], new_sets[token])), sorted=True)
+            union_outputs = self.expert_outputs_for_sets(normalized[token : token + 1], union.unsqueeze(0))[0]
+            expert_calls += int(union.numel())
+            old_positions = torch.searchsorted(union, old_sets[token])
+            new_positions = torch.searchsorted(union, new_sets[token])
+            old_selected = union_outputs.index_select(0, old_positions)
+            new_selected = union_outputs.index_select(0, new_positions)
+            old_outputs.append(normalized.new_zeros(self.hidden_dimension) + (old_weights[token].unsqueeze(1) * old_selected).sum(dim=0))
+            new_outputs.append(normalized.new_zeros(self.hidden_dimension) + (new_weights[token].unsqueeze(1) * new_selected).sum(dim=0))
+        return torch.stack(old_outputs, dim=0), torch.stack(new_outputs, dim=0), expert_calls
 
     def forward(
         self,
@@ -140,28 +210,17 @@ class ToyMoE(torch.nn.Module):
         """Evaluate the module; forcing fixes indices, never candidate gate values."""
         if gate_mode not in GATE_MODES:
             raise ValueError("unsupported gate mode")
-        hidden = self.hidden_from_q(inputs, bias, q)
-        normalized = self.rms_normalize(hidden)
-        logits = normalized @ self.router.transpose(0, 1)
-        probabilities = torch.softmax(logits, dim=1)
+        endpoint = self.route_from_q(inputs, bias, q, tie_tolerance=tie_tolerance)
+        hidden = endpoint.hidden
+        normalized = endpoint.normalized
         if forced_sets is None:
-            sets = stable_topk_sets(logits, self.top_k)
+            route = endpoint.route
         else:
-            sets = canonicalize_sets(forced_sets.to(device=logits.device), self.num_experts)
-            if sets.shape != (inputs.shape[0], self.top_k):
-                raise ValueError("forced_sets must have shape [tokens, top_k]")
-        route = RouteState(
-            sets=sets,
-            logits=logits,
-            probabilities=probabilities,
-            near_tie=near_tie_flags(logits, sets, tie_tolerance),
-            boundary_margin=boundary_margin(logits, sets),
-        )
-        selected_weights = probabilities.gather(1, sets)
-        if gate_mode == "topk_renormalized":
-            selected_weights = selected_weights / selected_weights.sum(dim=1, keepdim=True)
+            route = self._route_from_normalized(normalized, forced_sets=forced_sets, tie_tolerance=tie_tolerance)
+        sets = route.sets
+        selected_weights = self.gate_weights(route, sets, gate_mode)
         if sparse:
-            selected_outputs = self._sparse_expert_outputs(normalized, sets)
+            selected_outputs = self.expert_outputs_for_sets(normalized, sets)
             expert_calls = int(inputs.shape[0] * self.top_k)
         else:
             dense_outputs = self._dense_expert_outputs(normalized)

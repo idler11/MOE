@@ -34,6 +34,14 @@ def test_t09_fixed_scale_legal_shared_candidates_noop_and_duplicates() -> None:
     assert torch.equal(duplicate.z_values[0], torch.zeros(2, dtype=torch.float64))
     with pytest.raises(ValueError):
         candidates.q_for_z(torch.tensor([0.25, 0.0], dtype=torch.float64))
+    # 2 bits encode at most four distinct code values; zero point must also
+    # be a representable code rather than a free floating metadata field.
+    with pytest.raises(ValueError, match="codebook"):
+        QuantizationSpec(bits=2, qmin=-3, qmax=3, scale=0.2)
+    with pytest.raises(ValueError, match="zero_point"):
+        QuantizationSpec(bits=3, qmin=-3, qmax=3, zero_point=4, scale=0.2)
+    exact_two_bit = QuantizationSpec(bits=2, qmin=-2, qmax=1, zero_point=0, scale=0.2)
+    exact_two_bit.validate_codes(torch.tensor([-2.0, -1.0, 0.0, 1.0], dtype=torch.float64))
 
 
 def test_t10_shared_weight_reachability_blocks_tokenwise_oracle() -> None:
@@ -54,7 +62,6 @@ def test_t11_fixed_branch_gradient_hessian_hvp_and_gn_are_distinct() -> None:
     derivative = fixed_branch_derivatives(
         case["model"], case["inputs"], case["bias"], case["candidates"], case["target"], "full_softmax_selected"
     )
-    epsilon = 2.0e-4
     z0 = torch.zeros(case["candidates"].p, dtype=torch.float64)
 
     def loss_at(z: torch.Tensor) -> torch.Tensor:
@@ -63,12 +70,24 @@ def test_t11_fixed_branch_gradient_hessian_hvp_and_gn_are_distinct() -> None:
         )
         return per_token_loss(output, case["target"]).mean()
 
-    finite_gradient = []
-    for coordinate in range(case["candidates"].p):
-        direction = torch.zeros_like(z0)
-        direction[coordinate] = epsilon
-        finite_gradient.append(((loss_at(z0 + direction) - loss_at(z0 - direction)) / (2.0 * epsilon)).item())
-    assert torch.allclose(derivative.gradient, torch.tensor(finite_gradient, dtype=torch.float64), atol=1.0e-7, rtol=1.0e-5)
+    def central_gradient(epsilon: float) -> torch.Tensor:
+        estimates = []
+        for coordinate in range(case["candidates"].p):
+            direction = torch.zeros_like(z0)
+            direction[coordinate] = epsilon
+            estimates.append(((loss_at(z0 + direction) - loss_at(z0 - direction)) / (2.0 * epsilon)).item())
+        return torch.tensor(estimates, dtype=torch.float64)
+
+    # Sweep five orders of magnitude.  The two middle steps must form a
+    # stable finite-difference window and improve over the coarse endpoint;
+    # this prevents a single hand-picked epsilon from passing by accident.
+    steps = (1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5)
+    estimates = {step: central_gradient(step) for step in steps}
+    errors = {step: torch.linalg.vector_norm(estimate - derivative.gradient).item() for step, estimate in estimates.items()}
+    assert errors[1.0e-3] < errors[1.0e-1]
+    assert errors[1.0e-4] < errors[1.0e-1]
+    assert torch.allclose(estimates[1.0e-3], estimates[1.0e-4], atol=1.0e-7, rtol=1.0e-5)
+    assert torch.allclose(estimates[1.0e-4], derivative.gradient, atol=1.0e-7, rtol=1.0e-5)
     vector = torch.tensor([0.6, -0.8], dtype=torch.float64)
     hvp = fixed_branch_hvp(
         case["model"],

@@ -29,6 +29,10 @@ class QuantizationSpec:
             raise ValueError("bits must be positive")
         if self.qmin >= self.qmax:
             raise ValueError("qmin must be smaller than qmax")
+        if self.qmax - self.qmin + 1 > 2**self.bits:
+            raise ValueError("quantization codebook has more values than bits can encode")
+        if self.zero_point < self.qmin or self.zero_point > self.qmax:
+            raise ValueError("zero_point must lie inside the quantization codebook")
         if not torch.isfinite(torch.tensor(float(self.scale))) or self.scale <= 0:
             raise ValueError("scale must be finite and positive")
         if self.group_size is not None and self.group_size <= 0:
@@ -145,6 +149,43 @@ class ForwardResult:
     route: RouteState
     selected_weights: torch.Tensor
     expert_calls: int
+
+
+@dataclass
+class RoutedInputs:
+    """All-token router state, intentionally computed without expert calls."""
+
+    hidden: torch.Tensor
+    normalized: torch.Tensor
+    route: RouteState
+
+
+@dataclass
+class EventOnlyRouteCache:
+    """Reusable q0 router result shared across candidate endpoint checks."""
+
+    old_endpoint: RoutedInputs
+    token_count: int
+    hidden_dimension: int
+
+
+@dataclass
+class EventOnlyEventResult:
+    """Exact J_event only; non-event expert outputs are deliberately absent."""
+
+    signed_event: torch.Tensor
+    event_per_token: torch.Tensor
+    event_formula_per_token: torch.Tensor
+    jump_quadratic_per_token: torch.Tensor
+    event_mask: torch.Tensor
+    old_route: RouteState
+    new_route: RouteState
+    event_indices: torch.Tensor
+    fixed_event_output: torch.Tensor
+    actual_event_output: torch.Tensor
+    expert_calls: int
+    q0_route_reused: bool
+    evaluator: str
 
 
 @dataclass

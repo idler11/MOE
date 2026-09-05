@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from moe_event.audit import fresh_artifact_directory, git_metadata, verify_legacy_hashes, write_json
 from moe_event.candidates import generate_fixed_scale_candidates
-from moe_event.decomposition import finite_step_decomposition
+from moe_event.decomposition import build_event_only_route_cache, finite_step_decomposition
 from moe_event.derivatives import fixed_branch_derivatives
 from moe_event.scoring import score_candidate
 from moe_event.toy import ToyMoE
@@ -108,7 +108,18 @@ def run_case(config: Dict[str, Any], seed: int, gate_mode: str) -> Dict[str, Any
     z = candidates.z_values[candidate_index]
     q1 = candidates.q_for_index(candidate_index)
     dense = finite_step_decomposition(model, inputs, bias, q0, q1, target, gate_mode, evaluator="dense")
-    event_only = finite_step_decomposition(model, inputs, bias, q0, q1, target, gate_mode, evaluator="event_only")
+    route_cache = build_event_only_route_cache(model, inputs, bias, q0)
+    event_only = finite_step_decomposition(
+        model,
+        inputs,
+        bias,
+        q0,
+        q1,
+        target,
+        gate_mode,
+        evaluator="event_only",
+        route_cache=route_cache,
+    )
     derivatives = fixed_branch_derivatives(model, inputs, bias, candidates, target, gate_mode)
     score = score_candidate(candidates.candidate_ids[candidate_index], z, derivatives, dense)
     model32 = copy.deepcopy(model).to(dtype=torch.float32)
@@ -134,11 +145,11 @@ def run_case(config: Dict[str, Any], seed: int, gate_mode: str) -> Dict[str, Any
         "near_tie_new_count": int(dense.new_route.near_tie.sum().item()),
         "identity_error": identity_error,
         "signed_formula_max_abs_error": maximum_abs(dense.event_per_token - dense.event_formula_per_token),
-        "dense_event_only_actual_output_max_abs_error": maximum_abs(dense.actual_output - event_only.actual_output),
-        "dense_event_only_fixed_output_max_abs_error": maximum_abs(dense.fixed_output - event_only.fixed_output),
+        "dense_event_only_signed_event_abs_error": abs(float((dense.signed_event - event_only.signed_event).item())),
         "dense_event_only_event_max_abs_error": maximum_abs(dense.event_per_token - event_only.event_per_token),
         "dense_expert_calls": dense.expert_calls,
         "event_only_expert_calls": event_only.expert_calls,
+        "event_only_q0_route_reused": event_only.q0_route_reused,
         "full_hessian_vs_gauss_newton_max_abs_difference": maximum_abs(derivatives.hessian - derivatives.gauss_newton),
         "float32_output_max_abs_error": maximum_abs(dense.actual_output - output32.output.to(dtype=torch.float64)),
         "float32_route_sets_match_float64": bool(torch.equal(dense.new_route.sets, output32.route.sets)),
@@ -168,8 +179,7 @@ def main() -> int:
             for key in (
                 "identity_error",
                 "signed_formula_max_abs_error",
-                "dense_event_only_actual_output_max_abs_error",
-                "dense_event_only_fixed_output_max_abs_error",
+                "dense_event_only_signed_event_abs_error",
                 "dense_event_only_event_max_abs_error",
             ):
                 if row[key] > tolerance:
