@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "project": "moe-event-corrected-quantization",
+  "repository": "idler11/MOE",
+  "updated_date": "2026-09-05",
+  "timezone": "Asia/Tokyo",
+  "research_status": "hypothesis_and_handoff",
+  "authorized_stages": ["P0", "P1"],
+  "next_action": "Codex: inspect environment, independently recheck legacy, implement and test P1; then stop for review",
+  "stages": {
+    "P0": {"implementation_complete": false, "tests_passed": null, "review_approved": false, "status": "ready"},
+    "P1": {"implementation_complete": false, "tests_passed": null, "review_approved": false, "status": "ready_after_P0"},
+    "P2": {"status": "blocked_pending_P1_review"},
+    "P3": {"status": "blocked_pending_P2_and_model_authorization"},
+    "P4": {"status": "blocked_pending_P3_parity"},
+    "P5": {"status": "blocked_pending_P4_opportunity"},
+    "P6": {"status": "blocked_pending_P5_cost_and_novelty"}
+  },
+  "evidence": {
+    "legacy_package": "legacy/moe_theory_audit",
+    "legacy_manifest": "legacy/MANIFEST.json",
+    "local_user_environment_reproduced": false,
+    "pretrained_model_experiment_completed": false,
+    "runtime_advantage_demonstrated": false,
+    "generalization_demonstrated": false,
+    "novelty_audit_passed": false
+  },
+  "constraints": {
+    "max_gpu_count": 1,
+    "target_gpu": "RTX 4090",
+    "P0_P1_device": "CPU",
+    "automatic_model_download": false,
+    "paid_api_use": false,
+    "data_policy": "self_generated_by_default; external_corpora_require_explicit_approval"
+  }
+}

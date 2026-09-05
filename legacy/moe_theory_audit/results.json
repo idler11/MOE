@@ -1,0 +1,142 @@
+{
+  "disclaimer": "CPU synthetic verification only. No pretrained model weights or benchmarks used.",
+  "finite_vs_population": {
+    "finite_sample_difference_quotient": 0.0,
+    "uniform_population_derivative": 0.5,
+    "explanation": "Different objectives: finite empirical risk is locally constant in this example."
+  },
+  "routing_geometry": {
+    "tokens": 2048,
+    "input_dimension": 24,
+    "experts": 8,
+    "centered_router_rank": 7,
+    "RMSNorm_preserves_topk_order": true,
+    "predicted_event_vs_actual_accuracy": 1.0,
+    "actual_event_rate": 0.37255859375,
+    "nullspace_preserves_topk": true,
+    "nullspace_max_gate_probability_change": 0.11631804810019553
+  },
+  "scalar_crossing_example": {
+    "smooth_prediction": 0.0004,
+    "signed_endpoint_correction": 1.04,
+    "actual_loss_increase": 1.0404
+  },
+  "finite_step_trials": [
+    {
+      "seed": 0,
+      "tokens": 512,
+      "candidates": 32,
+      "max_identity_error": 1.942890293094024e-16,
+      "mean_event_rate": 0.12847900390625,
+      "fraction_negative_endpoint_route_terms_given_event": 0.260332541567696,
+      "mean_absolute_Taylor_error": 0.006692581138606578,
+      "mean_absolute_corrected_error": 9.032643398924922e-05,
+      "spearman_Taylor_vs_actual": 0.8284457478005864,
+      "spearman_corrected_vs_actual": 0.9996334310850439,
+      "candidate_regret_Taylor": 0.0,
+      "candidate_regret_corrected": 0.0,
+      "actual_delta_range": [
+        0.009956687832673158,
+        0.02981897076904167
+      ],
+      "warning": "Endpoint route terms evaluated exactly; computational savings NOT tested."
+    },
+    {
+      "seed": 1,
+      "tokens": 512,
+      "candidates": 32,
+      "max_identity_error": 1.1102230246251565e-16,
+      "mean_event_rate": 0.13739013671875,
+      "fraction_negative_endpoint_route_terms_given_event": 0.24433585073300756,
+      "mean_absolute_Taylor_error": 0.008183080915411527,
+      "mean_absolute_corrected_error": 5.48857276388576e-05,
+      "spearman_Taylor_vs_actual": 0.8027859237536656,
+      "spearman_corrected_vs_actual": 1.0,
+      "candidate_regret_Taylor": 0.0,
+      "candidate_regret_corrected": 0.0,
+      "actual_delta_range": [
+        0.00880161787927379,
+        0.025127003475762584
+      ],
+      "warning": "Endpoint route terms evaluated exactly; computational savings NOT tested."
+    },
+    {
+      "seed": 2,
+      "tokens": 512,
+      "candidates": 32,
+      "max_identity_error": 1.1102230246251565e-16,
+      "mean_event_rate": 0.11566162109375,
+      "fraction_negative_endpoint_route_terms_given_event": 0.24802110817941952,
+      "mean_absolute_Taylor_error": 0.006231302573834561,
+      "mean_absolute_corrected_error": 6.042011613225013e-05,
+      "spearman_Taylor_vs_actual": 0.8548387096774193,
+      "spearman_corrected_vs_actual": 0.9989002932551319,
+      "candidate_regret_Taylor": 0.0,
+      "candidate_regret_corrected": 0.0,
+      "actual_delta_range": [
+        0.005459476937373062,
+        0.02573901900522688
+      ],
+      "warning": "Endpoint route terms evaluated exactly; computational savings NOT tested."
+    }
+  ],
+  "exhaustive_rounding_trials": [
+    {
+      "seed": 0,
+      "tokens": 256,
+      "binary_rounding_choices": 8,
+      "candidates": 256,
+      "baseline_nearest_rounding_loss": 0.040362603488975024,
+      "oracle_best_loss": 0.03418666625643589,
+      "Taylor_selected_actual_loss": 0.035037878962106445,
+      "corrected_selected_actual_loss": 0.03418666625643589,
+      "Taylor_regret": 0.0008512127056705537,
+      "corrected_regret": 0.0,
+      "mean_absolute_Taylor_error": 0.001988650240478725,
+      "mean_absolute_corrected_error": 0.00011627014371043732,
+      "spearman_Taylor_vs_actual": 0.8454373140306705,
+      "spearman_corrected_vs_actual": 0.9985558766308079,
+      "mean_event_rate": 0.10467529296875,
+      "max_identity_error": 1.5178830414797062e-17,
+      "warning": "Exact full p-dimensional Hessian and exact endpoint corrections on random toy model. No pretrained model result, runtime improvement, or generalization claim."
+    },
+    {
+      "seed": 1,
+      "tokens": 256,
+      "binary_rounding_choices": 8,
+      "candidates": 256,
+      "baseline_nearest_rounding_loss": 0.05183057837471893,
+      "oracle_best_loss": 0.048202193269182236,
+      "Taylor_selected_actual_loss": 0.051442007195459716,
+      "corrected_selected_actual_loss": 0.048202193269182236,
+      "Taylor_regret": 0.0032398139262774794,
+      "corrected_regret": 0.0,
+      "mean_absolute_Taylor_error": 0.0016742674142543662,
+      "mean_absolute_corrected_error": 0.0002800787024342618,
+      "spearman_Taylor_vs_actual": 0.7223449301899748,
+      "spearman_corrected_vs_actual": 0.9977368963149459,
+      "mean_event_rate": 0.116668701171875,
+      "max_identity_error": 1.691355389077387e-17,
+      "warning": "Exact full p-dimensional Hessian and exact endpoint corrections on random toy model. No pretrained model result, runtime improvement, or generalization claim."
+    },
+    {
+      "seed": 2,
+      "tokens": 256,
+      "binary_rounding_choices": 8,
+      "candidates": 256,
+      "baseline_nearest_rounding_loss": 0.020410567970306825,
+      "oracle_best_loss": 0.01739181815854481,
+      "Taylor_selected_actual_loss": 0.02034745675575819,
+      "corrected_selected_actual_loss": 0.01739181815854481,
+      "Taylor_regret": 0.0029556385972133795,
+      "corrected_regret": 0.0,
+      "mean_absolute_Taylor_error": 0.0012336003475021426,
+      "mean_absolute_corrected_error": 3.425639878649506e-05,
+      "spearman_Taylor_vs_actual": 0.3240579938200961,
+      "spearman_corrected_vs_actual": 0.9995279240100708,
+      "mean_event_rate": 0.07037353515625,
+      "max_identity_error": 7.806255641895632e-18,
+      "warning": "Exact full p-dimensional Hessian and exact endpoint corrections on random toy model. No pretrained model result, runtime improvement, or generalization claim."
+    }
+  ]
+}

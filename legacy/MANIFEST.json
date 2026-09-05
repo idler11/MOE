@@ -1,0 +1,9 @@
+{
+  "archive_sha256": "44308f8c82b12cffb82de8e1e73f0d17b60aed0097776a247153e25dcb8ff382",
+  "files": {
+    "legacy/moe_theory_audit/README.md": "90877ca8fe9081f08c6cf72efe7bc244a044fa569d69b8046caea5a57650e281",
+    "legacy/moe_theory_audit/environment.json": "882c5f5bf95a6445f6c0d3045f27f57d052d218a2ac27731e4329cc46078bd22",
+    "legacy/moe_theory_audit/results.json": "99ff4949df07120df60c899d42fd5360780667a546a2103c2f74fe71811acc6a",
+    "legacy/moe_theory_audit/verify_math.py": "110382b6ef4d0bf308f31cc0780d62e8ac4d18f81f736c29bf70b5c2d374a9f5"
+  }
+}

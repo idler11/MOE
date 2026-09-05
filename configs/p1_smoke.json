@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "implementation_contract_not_a_completed_run",
+  "phase": "P1",
+  "device": "cpu",
+  "reference_dtype": "float64",
+  "secondary_dtype": "float32",
+  "seeds": [0, 1, 2],
+  "input_dimension": 12,
+  "hidden_dimension": 16,
+  "expert_hidden_dimension": 24,
+  "num_experts": 6,
+  "top_k": 2,
+  "gate_modes": ["full_softmax_selected", "topk_renormalized"],
+  "rms_epsilon": 0.00001,
+  "calibration_tokens": 32,
+  "holdout_tokens": 32,
+  "quantization": {
+    "bits": 3,
+    "signed": true,
+    "qmin": -3,
+    "qmax": 3,
+    "zero_point": 0,
+    "scale_policy": "per_tensor_max_abs_div_qmax_frozen",
+    "zero_tensor_scale": 1.0,
+    "candidate_coordinates": 4,
+    "coordinate_policy": "closest_valid_rounding_midpoint_stable_index",
+    "include_noop": true
+  },
+  "reference_tolerance": {"atol": 1e-10, "rtol": 1e-8},
+  "require_positive_improvement": false,
+  "notes": [
+    "P1 checks implementation correctness, not statistical efficacy.",
+    "Symmetric narrow range leaves one 3-bit code unused; call this simulated grid, not a packed kernel.",
+    "P2 uses a separately reviewed/preregistered config, not automatic extrapolation from this smoke."
+  ]
+}
